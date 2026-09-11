@@ -550,6 +550,16 @@ button:disabled {
   background: var(--card);
 }
 
+.description-error {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+  color: #b02a2a;
+}
+
+.description-error:empty {
+  display: none;
+}
+
 /* Scroll-reveal for entries/date headings as they enter the viewport */
 .reveal {
   opacity: 0;

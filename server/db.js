@@ -75,13 +75,24 @@ function addComment(entryId, comment) {
   });
 }
 
-function updateCaption(entryId, caption) {
+function normalizeName(name) {
+  return (name || '').trim().toLowerCase();
+}
+
+// Whoever posted an entry (by name — there's no real auth in this app) is
+// the only one allowed to edit its description.
+function updateCaption(entryId, caption, requesterName) {
   return enqueue(() => {
     const entries = readAll();
     const entry = entries.find((e) => e.id === entryId);
     if (!entry) {
       const err = new Error('Entry not found');
       err.code = 'NOT_FOUND';
+      throw err;
+    }
+    if (normalizeName(entry.name) !== normalizeName(requesterName)) {
+      const err = new Error('Not the owner');
+      err.code = 'FORBIDDEN';
       throw err;
     }
     entry.caption = caption;

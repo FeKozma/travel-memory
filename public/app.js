@@ -37,6 +37,13 @@ function prefillName() {
   if (stored) nameInput.value = stored;
 }
 
+// The name this device is currently "posting as" — used to decide whether
+// a post is editable. Mirrors the server's default: no remembered name
+// means you're posting (and therefore editing) as "Anonymous".
+function getEffectiveIdentity() {
+  return getStoredName() || 'Anonymous';
+}
+
 // --- Theme: defaults to the system preference; the toggle sets an explicit
 // override (persisted) that wins regardless of what the system does. ---
 function getStoredTheme() {
@@ -114,6 +121,12 @@ function canJoinCluster(lastEntry, entry) {
     normalizeName(lastEntry.name) === normalizeName(entry.name) &&
     Math.abs(new Date(entry.createdAt) - new Date(lastEntry.createdAt)) <= CLUSTER_GAP_MS
   );
+}
+
+// Same "no real auth, just the remembered name" model as clustering — only
+// the device that (claims to have) posted an entry can edit its caption.
+function isOwnEntry(entry) {
+  return normalizeName(getEffectiveIdentity()) === normalizeName(entry.name);
 }
 
 function updateDownloadButtonState() {
@@ -286,12 +299,16 @@ function buildDescriptionBlock(entry) {
       wrap.appendChild(p);
     }
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = entry.caption ? 'description-edit-btn' : 'description-add-btn';
-    btn.textContent = entry.caption ? 'Edit description' : '+ Add a description';
-    btn.addEventListener('click', renderEdit);
-    wrap.appendChild(btn);
+    // Only the person who (claims to have) posted this gets the control to
+    // add/edit its description — everyone else just sees the text as-is.
+    if (isOwnEntry(entry)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = entry.caption ? 'description-edit-btn' : 'description-add-btn';
+      btn.textContent = entry.caption ? 'Edit description' : '+ Add a description';
+      btn.addEventListener('click', renderEdit);
+      wrap.appendChild(btn);
+    }
   }
 
   function renderEdit() {
@@ -320,6 +337,10 @@ function buildDescriptionBlock(entry) {
     actions.appendChild(cancelBtn);
     form.appendChild(actions);
 
+    const error = document.createElement('p');
+    error.className = 'description-error';
+    form.appendChild(error);
+
     wrap.appendChild(form);
     textarea.focus();
 
@@ -329,19 +350,24 @@ function buildDescriptionBlock(entry) {
       event.preventDefault();
       const newCaption = textarea.value.trim();
       saveBtn.disabled = true;
+      error.textContent = '';
       try {
         const res = await fetch(`/api/entries/${entry.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ caption: newCaption }),
+          body: JSON.stringify({ caption: newCaption, name: getEffectiveIdentity() }),
         });
         const data = await res.json();
-        if (res.ok) entry.caption = data.caption;
+        if (res.ok) {
+          entry.caption = data.caption;
+          renderView();
+          return;
+        }
+        error.textContent = data.error || 'Could not save. Try again.';
       } catch {
-        // Network error — keep whatever the entry had before.
+        error.textContent = 'Network error — try again.';
       } finally {
         saveBtn.disabled = false;
-        renderView();
       }
     });
   }

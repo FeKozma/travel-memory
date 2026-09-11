@@ -135,13 +135,17 @@ app.post('/api/entries', submitLimiter, (req, res) => {
 
 app.patch('/api/entries/:id', commentLimiter, async (req, res) => {
   const caption = (req.body?.caption || '').trim().slice(0, MAX_CAPTION_LENGTH);
+  const requesterName = (req.body?.name || '').trim().slice(0, MAX_NAME_LENGTH) || 'Anonymous';
 
   try {
-    const entry = await db.updateCaption(req.params.id, caption);
+    const entry = await db.updateCaption(req.params.id, caption, requesterName);
     res.json(entry);
   } catch (err) {
     if (err.code === 'NOT_FOUND') {
       return res.status(404).json({ error: 'That post no longer exists.' });
+    }
+    if (err.code === 'FORBIDDEN') {
+      return res.status(403).json({ error: 'You can only edit your own posts.' });
     }
     res.status(500).json({ error: 'Could not update description.' });
   }
