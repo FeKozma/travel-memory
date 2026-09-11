@@ -340,7 +340,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1rem;
-  margin-bottom: 2.25rem;
+  margin-bottom: 0;
   box-shadow: 0 2px 10px var(--shadow);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
@@ -412,75 +412,58 @@ button:disabled {
   }
 }
 
-/* Comments: a small tag attached to the post's corner, overlapping it and
-   sitting a bit to the right of its edge. Opens into a note-like panel. */
-.comment-stack {
-  position: absolute;
-  right: -14px;
-  bottom: -14px;
-  z-index: 3;
+/* Comments: always visible, anchored at the same spot the old toggle bubble
+   used — overlapping the entry above (negative top margin) and sitting a
+   bit to the right of its edge (auto/negative margins) — but now taking up
+   real layout space, so it pushes whatever comes after it further down. */
+.comment-block {
+  position: relative;
+  width: min(270px, 78%);
+  margin: -16px -14px 1.5rem auto;
+  z-index: 2;
 }
 
-.comment-toggle {
-  display: inline-flex;
+.comment-empty-bubble {
+  display: flex;
   align-items: center;
-  gap: 0.3rem;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
   background: var(--card);
   color: var(--ink);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.35rem 0.7rem;
-  font-size: 0.78rem;
-  line-height: 1;
+  font-size: 0.85rem;
   cursor: pointer;
   box-shadow: 0 3px 10px var(--shadow-strong);
   transform: rotate(-3deg);
 }
 
-.comment-toggle:hover {
-  transform: rotate(-3deg) scale(1.06);
+.comment-empty-bubble:hover {
+  transform: rotate(-3deg) scale(1.08);
 }
 
-.comment-toggle:active {
-  transform: rotate(-3deg) scale(0.97);
-}
-
-.comment-count {
-  font-weight: 700;
-  color: var(--accent);
-}
-
-.comment-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: min(270px, 78vw);
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.7rem;
-  box-shadow: 0 10px 26px var(--shadow-strong);
-  transform-origin: top right;
-  opacity: 0;
-  transform: scale(0.95) translateY(-4px);
-  pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.comment-panel.open {
-  opacity: 1;
-  transform: scale(1) translateY(0);
-  pointer-events: auto;
+.comment-empty-bubble[hidden] {
+  display: none;
 }
 
 .comment-list {
-  max-height: 170px;
+  margin: 0 0 0.4rem;
+  padding: 0.6rem 0.7rem 0.2rem;
+  max-height: 220px;
   overflow-y: auto;
-  margin: 0 0 0.5rem;
-  padding-right: 2px;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 3px 10px var(--shadow-strong);
+}
+
+.comment-list[hidden] {
+  display: none;
 }
 
 .comment-item {
@@ -495,15 +478,10 @@ button:disabled {
   color: var(--accent-2);
 }
 
-.comment-empty {
-  margin: 0 0 0.5rem;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
 .comment-form {
   display: flex;
   gap: 0.4rem;
+  margin-top: 0.4rem;
 }
 
 .comment-form input {
@@ -538,8 +516,7 @@ button:disabled {
   .entry,
   .entry img,
   button,
-  .file-label,
-  .comment-panel {
+  .file-label {
     transition: none;
   }
 

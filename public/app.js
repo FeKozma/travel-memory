@@ -143,33 +143,23 @@ function observeReveal(el, delayMs) {
   revealObserver.observe(el);
 }
 
-// --- Comments: attached to their post, overlapping its corner ---
-function closeAllCommentPanels() {
-  document.querySelectorAll('.comment-panel.open').forEach((p) => p.classList.remove('open'));
-}
-
-document.addEventListener('click', (event) => {
-  if (!event.target.closest('.comment-stack')) closeAllCommentPanels();
-});
-
-function buildCommentStack(entry) {
+// --- Comments: always visible, anchored where the old toggle bubble sat.
+// A sibling of the entry (not nested inside it) so its own height pushes
+// whatever comes next further down the timeline.
+function buildCommentBlock(entry) {
   if (!Array.isArray(entry.comments)) entry.comments = [];
 
-  const wrap = document.createElement('div');
-  wrap.className = 'comment-stack';
+  const block = document.createElement('div');
+  block.className = 'comment-block';
 
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'comment-toggle';
-  toggle.setAttribute('aria-label', 'View or add comments');
-  wrap.appendChild(toggle);
-
-  const panel = document.createElement('div');
-  panel.className = 'comment-panel';
+  const emptyBubble = document.createElement('div');
+  emptyBubble.className = 'comment-empty-bubble';
+  emptyBubble.title = 'Add the first comment';
+  block.appendChild(emptyBubble);
 
   const list = document.createElement('div');
   list.className = 'comment-list';
-  panel.appendChild(list);
+  block.appendChild(list);
 
   const form = document.createElement('form');
   form.className = 'comment-form';
@@ -183,45 +173,32 @@ function buildCommentStack(entry) {
   submit.setAttribute('aria-label', 'Post comment');
   form.appendChild(input);
   form.appendChild(submit);
-  panel.appendChild(form);
+  block.appendChild(form);
 
-  wrap.appendChild(panel);
+  function render() {
+    const hasComments = entry.comments.length > 0;
 
-  function renderCount() {
-    toggle.innerHTML = `💬 <span class="comment-count">${entry.comments.length}</span>`;
-  }
+    emptyBubble.hidden = hasComments;
+    emptyBubble.innerHTML = '💬';
 
-  function renderComments() {
+    list.hidden = !hasComments;
     list.innerHTML = '';
-    if (!entry.comments.length) {
-      const empty = document.createElement('p');
-      empty.className = 'comment-empty';
-      empty.textContent = 'No comments yet.';
-      list.appendChild(empty);
-      return;
+    if (hasComments) {
+      for (const comment of entry.comments) {
+        const p = document.createElement('p');
+        p.className = 'comment-item';
+        const author = document.createElement('span');
+        author.className = 'comment-author';
+        author.textContent = `${comment.name}: `;
+        p.appendChild(author);
+        p.appendChild(document.createTextNode(comment.text));
+        list.appendChild(p);
+      }
+      list.scrollTop = list.scrollHeight;
     }
-    for (const comment of entry.comments) {
-      const p = document.createElement('p');
-      p.className = 'comment-item';
-      const author = document.createElement('span');
-      author.className = 'comment-author';
-      author.textContent = `${comment.name}: `;
-      p.appendChild(author);
-      p.appendChild(document.createTextNode(comment.text));
-      list.appendChild(p);
-    }
-    list.scrollTop = list.scrollHeight;
   }
 
-  toggle.addEventListener('click', () => {
-    const wasOpen = panel.classList.contains('open');
-    closeAllCommentPanels();
-    if (!wasOpen) {
-      renderComments();
-      panel.classList.add('open');
-      input.focus();
-    }
-  });
+  emptyBubble.addEventListener('click', () => input.focus());
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -240,8 +217,7 @@ function buildCommentStack(entry) {
 
       entry.comments.push(data);
       input.value = '';
-      renderCount();
-      renderComments();
+      render();
     } catch {
       // Network error — leave the draft in place so they can retry.
     } finally {
@@ -249,8 +225,8 @@ function buildCommentStack(entry) {
     }
   });
 
-  renderCount();
-  return wrap;
+  render();
+  return block;
 }
 
 function buildDateHeading(entry, options) {
@@ -291,8 +267,6 @@ function buildEntryCard(entry, options) {
   meta.textContent = `${entry.name} · ${formatTime(entry.createdAt)}`;
   card.appendChild(meta);
 
-  card.appendChild(buildCommentStack(entry));
-
   if (options && options.pop && !prefersReducedMotion) {
     card.classList.add('entry-added');
   }
@@ -331,6 +305,11 @@ function renderTimeline(entries) {
     observeReveal(card, Math.min(staggerIndex * 60, 400));
     timelineEl.appendChild(card);
     staggerIndex += 1;
+
+    const commentBlock = buildCommentBlock(entry);
+    observeReveal(commentBlock, Math.min(staggerIndex * 60, 400));
+    timelineEl.appendChild(commentBlock);
+    staggerIndex += 1;
   }
 }
 
@@ -350,6 +329,10 @@ function appendNewEntry(entry) {
   const card = buildEntryCard(entry, { pop: true });
   timelineEl.appendChild(card);
 
+  const commentBlock = buildCommentBlock(entry);
+  if (!prefersReducedMotion) commentBlock.classList.add('entry-added');
+  timelineEl.appendChild(commentBlock);
+
   if (entry.imagePath) {
     photoCount += 1;
     updateDownloadButtonState();
@@ -362,6 +345,7 @@ function appendNewEntry(entry) {
     setTimeout(() => card.classList.add('entry-glow'), 450);
     setTimeout(() => {
       card.classList.remove('entry-added', 'entry-glow');
+      commentBlock.classList.remove('entry-added');
       if (heading) heading.classList.remove('entry-added');
     }, 3300);
   }
