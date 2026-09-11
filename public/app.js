@@ -97,14 +97,23 @@ updateThemeToggleIcon();
 let lastRenderedDateKey = null;
 let photoCount = 0;
 
-// Photo-bearing entries posted within this many minutes of each other clump
-// into one shared carousel. `activeCluster` tracks the trailing cluster so a
-// freshly-submitted entry can extend it instead of starting a new card.
-const CLUSTER_GAP_MS = 15 * 60 * 1000;
+// Photo-bearing entries from the SAME person, posted within this many
+// minutes of each other, clump into one shared carousel — different
+// people's posts (or a text-only post) never merge, even if simultaneous.
+// `activeCluster` tracks the trailing cluster so a freshly-submitted entry
+// can extend it instead of starting a new card.
+const CLUSTER_GAP_MS = 30 * 60 * 1000;
 let activeCluster = null; // { entries, cardEl, trailingCommentEl } | null
 
-function withinClusterGap(aIso, bIso) {
-  return Math.abs(new Date(bIso) - new Date(aIso)) <= CLUSTER_GAP_MS;
+function normalizeName(name) {
+  return (name || '').trim().toLowerCase();
+}
+
+function canJoinCluster(lastEntry, entry) {
+  return (
+    normalizeName(lastEntry.name) === normalizeName(entry.name) &&
+    Math.abs(new Date(entry.createdAt) - new Date(lastEntry.createdAt)) <= CLUSTER_GAP_MS
+  );
 }
 
 function updateDownloadButtonState() {
@@ -156,11 +165,19 @@ function observeReveal(el, delayMs) {
   revealObserver.observe(el);
 }
 
-// --- Comments: always visible, anchored where the old toggle bubble sat.
-// A sibling of the entry (not nested inside it) so its own height pushes
-// whatever comes next further down the timeline.
-function buildCommentBlock(entry) {
-  if (!Array.isArray(entry.comments)) entry.comments = [];
+// --- Comments: one merged thread per cluster (not per contributing post),
+// always visible, anchored where the old toggle bubble sat. A sibling of
+// the card (not nested inside it) so its own height pushes whatever comes
+// next further down the timeline. New comments attach to the cluster's
+// most recent entry; the thread displayed merges every entry's comments.
+function buildCommentBlock(clusterEntries) {
+  const postTarget = clusterEntries[clusterEntries.length - 1];
+
+  function allComments() {
+    return clusterEntries
+      .flatMap((entry) => (Array.isArray(entry.comments) ? entry.comments : []))
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  }
 
   const block = document.createElement('div');
   block.className = 'comment-block';
@@ -189,7 +206,8 @@ function buildCommentBlock(entry) {
   block.appendChild(form);
 
   function render() {
-    const hasComments = entry.comments.length > 0;
+    const comments = allComments();
+    const hasComments = comments.length > 0;
 
     emptyBubble.hidden = hasComments;
     emptyBubble.innerHTML = '💬';
@@ -197,7 +215,7 @@ function buildCommentBlock(entry) {
     list.hidden = !hasComments;
     list.innerHTML = '';
     if (hasComments) {
-      for (const comment of entry.comments) {
+      for (const comment of comments) {
         const p = document.createElement('p');
         p.className = 'comment-item';
         const author = document.createElement('span');
@@ -229,7 +247,7 @@ function buildCommentBlock(entry) {
 
     submit.disabled = true;
     try {
-      const res = await fetch(`/api/entries/${entry.id}/comments`, {
+      const res = await fetch(`/api/entries/${postTarget.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: getStoredName(), text }),
@@ -237,7 +255,8 @@ function buildCommentBlock(entry) {
       const data = await res.json();
       if (!res.ok) return;
 
-      entry.comments.push(data);
+      if (!Array.isArray(postTarget.comments)) postTarget.comments = [];
+      postTarget.comments.push(data);
       input.value = '';
       render();
     } catch {
@@ -249,6 +268,86 @@ function buildCommentBlock(entry) {
 
   render();
   return block;
+}
+
+// --- Description: one editable caption per cluster, not per contributing
+// post — shown under the shared photos, addable/editable even if no post
+// in the cluster had a caption to begin with.
+function buildDescriptionBlock(entry) {
+  const wrap = document.createElement('div');
+  wrap.className = 'entry-description';
+
+  function renderView() {
+    wrap.innerHTML = '';
+    if (entry.caption) {
+      const p = document.createElement('p');
+      p.className = 'entry-caption';
+      p.textContent = entry.caption;
+      wrap.appendChild(p);
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = entry.caption ? 'description-edit-btn' : 'description-add-btn';
+    btn.textContent = entry.caption ? 'Edit description' : '+ Add a description';
+    btn.addEventListener('click', renderEdit);
+    wrap.appendChild(btn);
+  }
+
+  function renderEdit() {
+    wrap.innerHTML = '';
+
+    const form = document.createElement('form');
+    form.className = 'description-form';
+
+    const textarea = document.createElement('textarea');
+    textarea.value = entry.caption || '';
+    textarea.maxLength = 500;
+    textarea.rows = 2;
+    textarea.placeholder = 'Say something about this moment…';
+    form.appendChild(textarea);
+
+    const actions = document.createElement('div');
+    actions.className = 'description-actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'submit';
+    saveBtn.textContent = 'Save';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'description-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    wrap.appendChild(form);
+    textarea.focus();
+
+    cancelBtn.addEventListener('click', renderView);
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const newCaption = textarea.value.trim();
+      saveBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/entries/${entry.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ caption: newCaption }),
+        });
+        const data = await res.json();
+        if (res.ok) entry.caption = data.caption;
+      } catch {
+        // Network error — keep whatever the entry had before.
+      } finally {
+        saveBtn.disabled = false;
+        renderView();
+      }
+    });
+  }
+
+  renderView();
+  return wrap;
 }
 
 function buildDateHeading(entry, options) {
@@ -360,73 +459,56 @@ function buildImageArea(images) {
   return carousel;
 }
 
-// A "cluster" is 1+ entries rendered as one card: all their photos share a
-// single image area up top, and each entry keeps its own caption/name/time
-// beneath it. Every entry but the last also gets its own comment thread
-// nested inline; the last entry's comment block is returned separately so
-// the caller can attach it as the usual overlapping sibling after the card.
+// A "cluster" is 1+ entries (same person, all within CLUSTER_GAP_MS) shown
+// as one card: every photo across the cluster shares one carousel, with a
+// single editable description and one name/time line for the whole thing.
 function buildClusterCard(clusterEntries, options) {
   const card = document.createElement('article');
   card.className = 'entry';
   card.dataset.ids = clusterEntries.map((entry) => entry.id).join(',');
 
+  const first = clusterEntries[0];
+
   const images = [];
   for (const entry of clusterEntries) {
     for (const path of entry.images || []) {
-      images.push({ path, alt: entry.caption || `${entry.name}'s photo` });
+      images.push({ path, alt: `${first.name}'s photo` });
     }
   }
   const imageArea = buildImageArea(images);
   if (imageArea) card.appendChild(imageArea);
 
-  clusterEntries.forEach((entry, index) => {
-    const isLast = index === clusterEntries.length - 1;
+  // Whichever entry currently holds the caption text is the one edits land
+  // on; if none has one yet, "+ Add a description" writes it to the first.
+  const descriptionEntry = clusterEntries.find((entry) => entry.caption) || first;
+  card.appendChild(buildDescriptionBlock(descriptionEntry));
 
-    const textBlock = document.createElement('div');
-    if (index > 0) textBlock.className = 'entry-text-block--divider';
-
-    if (entry.caption) {
-      const caption = document.createElement('p');
-      caption.className = 'entry-caption';
-      caption.textContent = entry.caption;
-      textBlock.appendChild(caption);
-    }
-
-    const meta = document.createElement('p');
-    meta.className = 'entry-meta';
-    meta.textContent = `${entry.name} · ${formatTime(entry.createdAt)}`;
-    textBlock.appendChild(meta);
-
-    card.appendChild(textBlock);
-
-    if (!isLast) {
-      const inlineComments = buildCommentBlock(entry);
-      inlineComments.classList.add('comment-block--inline');
-      card.appendChild(inlineComments);
-    }
-  });
+  const meta = document.createElement('p');
+  meta.className = 'entry-meta';
+  meta.textContent = `${first.name} · ${formatTime(first.createdAt)}`;
+  card.appendChild(meta);
 
   if (options && options.pop && !prefersReducedMotion) {
     card.classList.add('entry-added');
   }
 
-  return { card, lastEntry: clusterEntries[clusterEntries.length - 1] };
+  return { card };
 }
 
 function hasImages(entry) {
   return Boolean(entry.images && entry.images.length);
 }
 
-// Renders one cluster (1+ entries): the shared card plus the trailing
-// entry's comment block, appended to the timeline. Returns both elements
-// so the caller can track/animate/scroll to them.
+// Renders one cluster (1+ entries): the shared card plus the merged
+// comment thread, appended to the timeline. Returns both elements so the
+// caller can track/animate/scroll to them.
 function flushCluster(clusterEntries, staggerIndexRef, options) {
-  const { card, lastEntry } = buildClusterCard(clusterEntries, options);
+  const { card } = buildClusterCard(clusterEntries, options);
   observeReveal(card, Math.min(staggerIndexRef.value * 60, 400));
   timelineEl.appendChild(card);
   staggerIndexRef.value += 1;
 
-  const trailingCommentEl = buildCommentBlock(lastEntry);
+  const trailingCommentEl = buildCommentBlock(clusterEntries);
   if (options && options.pop && !prefersReducedMotion) trailingCommentEl.classList.add('entry-added');
   observeReveal(trailingCommentEl, Math.min(staggerIndexRef.value * 60, 400));
   timelineEl.appendChild(trailingCommentEl);
@@ -480,7 +562,7 @@ function renderTimeline(entries) {
       continue;
     }
 
-    if (pendingCluster.length && withinClusterGap(pendingCluster[pendingCluster.length - 1].createdAt, entry.createdAt)) {
+    if (pendingCluster.length && canJoinCluster(pendingCluster[pendingCluster.length - 1], entry)) {
       pendingCluster.push(entry);
     } else {
       flushPending();
@@ -511,7 +593,7 @@ function appendNewEntry(entry) {
     !dateChanged &&
     hasImages(entry) &&
     activeCluster &&
-    withinClusterGap(activeCluster.entries[activeCluster.entries.length - 1].createdAt, entry.createdAt);
+    canJoinCluster(activeCluster.entries[activeCluster.entries.length - 1], entry);
 
   let cardEl;
   let trailingCommentEl;
@@ -520,17 +602,17 @@ function appendNewEntry(entry) {
     activeCluster.cardEl.remove();
     activeCluster.trailingCommentEl.remove();
     const newEntries = [...activeCluster.entries, entry];
-    const { card, lastEntry } = buildClusterCard(newEntries, { pop: true });
+    const { card } = buildClusterCard(newEntries, { pop: true });
     timelineEl.appendChild(card);
-    trailingCommentEl = buildCommentBlock(lastEntry);
+    trailingCommentEl = buildCommentBlock(newEntries);
     if (!prefersReducedMotion) trailingCommentEl.classList.add('entry-added');
     timelineEl.appendChild(trailingCommentEl);
     cardEl = card;
     activeCluster = { entries: newEntries, cardEl, trailingCommentEl };
   } else {
-    const { card, lastEntry } = buildClusterCard([entry], { pop: true });
+    const { card } = buildClusterCard([entry], { pop: true });
     timelineEl.appendChild(card);
-    trailingCommentEl = buildCommentBlock(lastEntry);
+    trailingCommentEl = buildCommentBlock([entry]);
     if (!prefersReducedMotion) trailingCommentEl.classList.add('entry-added');
     timelineEl.appendChild(trailingCommentEl);
     cardEl = card;

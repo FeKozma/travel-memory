@@ -133,6 +133,20 @@ app.post('/api/entries', submitLimiter, (req, res) => {
   });
 });
 
+app.patch('/api/entries/:id', commentLimiter, async (req, res) => {
+  const caption = (req.body?.caption || '').trim().slice(0, MAX_CAPTION_LENGTH);
+
+  try {
+    const entry = await db.updateCaption(req.params.id, caption);
+    res.json(entry);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') {
+      return res.status(404).json({ error: 'That post no longer exists.' });
+    }
+    res.status(500).json({ error: 'Could not update description.' });
+  }
+});
+
 app.post('/api/entries/:id/comments', commentLimiter, async (req, res) => {
   const name = (req.body?.name || '').trim().slice(0, MAX_NAME_LENGTH) || 'Anonymous';
   const text = (req.body?.text || '').trim().slice(0, MAX_COMMENT_LENGTH);

@@ -485,20 +485,69 @@ button:disabled {
   height: 8px;
 }
 
-/* A divider between contributors' captions when several nearby posts have
-   clumped into one shared carousel card. */
-.entry-text-block--divider {
-  margin-top: 0.6rem;
-  padding-top: 0.6rem;
-  border-top: 1px dashed var(--border);
+/* One editable description per cluster, shown under the shared photos. */
+.entry-description {
+  margin-bottom: 0.2rem;
 }
 
-/* Comments nested inside a multi-post cluster card: same look, but no
-   overlap trick (there's no "next card" of its own to overlap here). */
-/* Compound selector (not just .comment-block--inline) so this reliably
-   wins over the base .comment-block margin regardless of rule order. */
-.comment-block.comment-block--inline {
-  margin: 0.5rem 0 0.75rem auto;
+.description-add-btn,
+.description-edit-btn {
+  display: inline-block;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.description-add-btn {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.description-edit-btn {
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+.description-add-btn:hover,
+.description-edit-btn:hover {
+  color: var(--accent);
+}
+
+.description-form textarea {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.description-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.description-actions button {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.82rem;
+}
+
+.description-cancel-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.description-cancel-btn:hover {
+  background: var(--card);
 }
 
 /* Scroll-reveal for entries/date headings as they enter the viewport */

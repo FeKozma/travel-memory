@@ -75,4 +75,19 @@ function addComment(entryId, comment) {
   });
 }
 
-module.exports = { readAll, appendEntry, addComment };
+function updateCaption(entryId, caption) {
+  return enqueue(() => {
+    const entries = readAll();
+    const entry = entries.find((e) => e.id === entryId);
+    if (!entry) {
+      const err = new Error('Entry not found');
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+    entry.caption = caption;
+    writeAll(entries);
+    return entry;
+  });
+}
+
+module.exports = { readAll, appendEntry, addComment, updateCaption };
