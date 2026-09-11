@@ -492,6 +492,10 @@ button:disabled {
   margin-top: 0.4rem;
 }
 
+.comment-form[hidden] {
+  display: none;
+}
+
 .comment-form input {
   flex: 1;
   min-width: 0;

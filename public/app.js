@@ -199,9 +199,18 @@ function buildCommentBlock(entry) {
       }
       list.scrollTop = list.scrollHeight;
     }
+
+    // With no comments yet, only the bubble shows; the form stays hidden
+    // until it's clicked. Once there's at least one comment, the form
+    // (and the thread) stays visible from then on.
+    form.hidden = !hasComments;
   }
 
-  emptyBubble.addEventListener('click', () => input.focus());
+  emptyBubble.addEventListener('click', () => {
+    emptyBubble.hidden = true;
+    form.hidden = false;
+    input.focus();
+  });
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
