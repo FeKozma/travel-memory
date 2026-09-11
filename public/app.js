@@ -97,6 +97,16 @@ updateThemeToggleIcon();
 let lastRenderedDateKey = null;
 let photoCount = 0;
 
+// Photo-bearing entries posted within this many minutes of each other clump
+// into one shared carousel. `activeCluster` tracks the trailing cluster so a
+// freshly-submitted entry can extend it instead of starting a new card.
+const CLUSTER_GAP_MS = 15 * 60 * 1000;
+let activeCluster = null; // { entries, cardEl, trailingCommentEl } | null
+
+function withinClusterGap(aIso, bIso) {
+  return Math.abs(new Date(bIso) - new Date(aIso)) <= CLUSTER_GAP_MS;
+}
+
 function updateDownloadButtonState() {
   const enabled = photoCount > 0;
   downloadAllBtn.classList.toggle('disabled', !enabled);
@@ -249,47 +259,187 @@ function buildDateHeading(entry, options) {
   return heading;
 }
 
-function buildEntryCard(entry, options) {
+function attachLoadFade(img) {
+  if (img.complete) {
+    img.classList.add('loaded');
+  } else {
+    img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
+  }
+}
+
+// A single plain image, or — for 2+ photos — a swipeable carousel. Uses
+// native horizontal scroll-snap so touch swipe (mobile) and the arrow
+// buttons (any pointer) both just work, no drag-gesture code needed.
+function buildImageArea(images) {
+  if (!images.length) return null;
+
+  if (images.length === 1) {
+    const img = document.createElement('img');
+    img.src = images[0].path;
+    img.alt = images[0].alt;
+    img.loading = 'lazy';
+    attachLoadFade(img);
+    return img;
+  }
+
+  const carousel = document.createElement('div');
+  carousel.className = 'carousel';
+
+  // The viewport wraps just the track + nav arrows, so the arrows center
+  // on the image area itself rather than on the carousel+dots as a whole.
+  const viewport = document.createElement('div');
+  viewport.className = 'carousel-viewport';
+  carousel.appendChild(viewport);
+
+  const track = document.createElement('div');
+  track.className = 'carousel-track';
+  viewport.appendChild(track);
+
+  for (const image of images) {
+    const slide = document.createElement('div');
+    slide.className = 'carousel-slide';
+    const img = document.createElement('img');
+    img.src = image.path;
+    img.alt = image.alt;
+    img.loading = 'lazy';
+    attachLoadFade(img);
+    slide.appendChild(img);
+    track.appendChild(slide);
+  }
+
+  const prevBtn = document.createElement('button');
+  prevBtn.type = 'button';
+  prevBtn.className = 'carousel-nav carousel-prev';
+  prevBtn.textContent = '‹';
+  prevBtn.setAttribute('aria-label', 'Previous photo');
+
+  const nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
+  nextBtn.className = 'carousel-nav carousel-next';
+  nextBtn.textContent = '›';
+  nextBtn.setAttribute('aria-label', 'Next photo');
+
+  viewport.appendChild(prevBtn);
+  viewport.appendChild(nextBtn);
+
+  const dotsWrap = document.createElement('div');
+  dotsWrap.className = 'carousel-dots';
+  const dots = images.map((_, i) => {
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = 'carousel-dot';
+    dot.setAttribute('aria-label', `Go to photo ${i + 1}`);
+    dot.addEventListener('click', () => scrollToIndex(i));
+    dotsWrap.appendChild(dot);
+    return dot;
+  });
+  carousel.appendChild(dotsWrap);
+
+  function currentIndex() {
+    const slideWidth = track.clientWidth || 1;
+    return Math.max(0, Math.min(images.length - 1, Math.round(track.scrollLeft / slideWidth)));
+  }
+
+  function updateDots() {
+    const idx = currentIndex();
+    dots.forEach((dot, i) => dot.classList.toggle('active', i === idx));
+  }
+
+  function scrollToIndex(i) {
+    track.scrollTo({
+      left: i * track.clientWidth,
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    });
+  }
+
+  prevBtn.addEventListener('click', () => scrollToIndex(Math.max(0, currentIndex() - 1)));
+  nextBtn.addEventListener('click', () => scrollToIndex(Math.min(images.length - 1, currentIndex() + 1)));
+  track.addEventListener('scroll', () => window.requestAnimationFrame(updateDots));
+
+  updateDots();
+  return carousel;
+}
+
+// A "cluster" is 1+ entries rendered as one card: all their photos share a
+// single image area up top, and each entry keeps its own caption/name/time
+// beneath it. Every entry but the last also gets its own comment thread
+// nested inline; the last entry's comment block is returned separately so
+// the caller can attach it as the usual overlapping sibling after the card.
+function buildClusterCard(clusterEntries, options) {
   const card = document.createElement('article');
   card.className = 'entry';
-  card.dataset.id = entry.id;
+  card.dataset.ids = clusterEntries.map((entry) => entry.id).join(',');
 
-  if (entry.imagePath) {
-    const img = document.createElement('img');
-    img.src = entry.imagePath;
-    img.alt = entry.caption || 'Trip photo';
-    img.loading = 'lazy';
-    if (img.complete) {
-      img.classList.add('loaded');
-    } else {
-      img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
+  const images = [];
+  for (const entry of clusterEntries) {
+    for (const path of entry.images || []) {
+      images.push({ path, alt: entry.caption || `${entry.name}'s photo` });
     }
-    card.appendChild(img);
   }
+  const imageArea = buildImageArea(images);
+  if (imageArea) card.appendChild(imageArea);
 
-  if (entry.caption) {
-    const caption = document.createElement('p');
-    caption.className = 'entry-caption';
-    caption.textContent = entry.caption;
-    card.appendChild(caption);
-  }
+  clusterEntries.forEach((entry, index) => {
+    const isLast = index === clusterEntries.length - 1;
 
-  const meta = document.createElement('p');
-  meta.className = 'entry-meta';
-  meta.textContent = `${entry.name} · ${formatTime(entry.createdAt)}`;
-  card.appendChild(meta);
+    const textBlock = document.createElement('div');
+    if (index > 0) textBlock.className = 'entry-text-block--divider';
+
+    if (entry.caption) {
+      const caption = document.createElement('p');
+      caption.className = 'entry-caption';
+      caption.textContent = entry.caption;
+      textBlock.appendChild(caption);
+    }
+
+    const meta = document.createElement('p');
+    meta.className = 'entry-meta';
+    meta.textContent = `${entry.name} · ${formatTime(entry.createdAt)}`;
+    textBlock.appendChild(meta);
+
+    card.appendChild(textBlock);
+
+    if (!isLast) {
+      const inlineComments = buildCommentBlock(entry);
+      inlineComments.classList.add('comment-block--inline');
+      card.appendChild(inlineComments);
+    }
+  });
 
   if (options && options.pop && !prefersReducedMotion) {
     card.classList.add('entry-added');
   }
 
-  return card;
+  return { card, lastEntry: clusterEntries[clusterEntries.length - 1] };
+}
+
+function hasImages(entry) {
+  return Boolean(entry.images && entry.images.length);
+}
+
+// Renders one cluster (1+ entries): the shared card plus the trailing
+// entry's comment block, appended to the timeline. Returns both elements
+// so the caller can track/animate/scroll to them.
+function flushCluster(clusterEntries, staggerIndexRef, options) {
+  const { card, lastEntry } = buildClusterCard(clusterEntries, options);
+  observeReveal(card, Math.min(staggerIndexRef.value * 60, 400));
+  timelineEl.appendChild(card);
+  staggerIndexRef.value += 1;
+
+  const trailingCommentEl = buildCommentBlock(lastEntry);
+  if (options && options.pop && !prefersReducedMotion) trailingCommentEl.classList.add('entry-added');
+  observeReveal(trailingCommentEl, Math.min(staggerIndexRef.value * 60, 400));
+  timelineEl.appendChild(trailingCommentEl);
+  staggerIndexRef.value += 1;
+
+  return { card, trailingCommentEl };
 }
 
 function renderTimeline(entries) {
   timelineEl.innerHTML = '';
   lastRenderedDateKey = null;
-  photoCount = entries.filter((entry) => entry.imagePath).length;
+  activeCluster = null;
+  photoCount = entries.reduce((sum, entry) => sum + (entry.images ? entry.images.length : 0), 0);
   updateDownloadButtonState();
 
   if (!entries.length) {
@@ -301,63 +451,105 @@ function renderTimeline(entries) {
     return;
   }
 
-  let staggerIndex = 0;
+  const staggerIndexRef = { value: 0 };
+  let pendingCluster = [];
+
+  function flushPending() {
+    if (!pendingCluster.length) return;
+    const { card, trailingCommentEl } = flushCluster(pendingCluster, staggerIndexRef);
+    activeCluster = { entries: pendingCluster, cardEl: card, trailingCommentEl };
+    pendingCluster = [];
+  }
 
   for (const entry of entries) {
     const dateKey = new Date(entry.createdAt).toDateString();
     if (dateKey !== lastRenderedDateKey) {
+      flushPending();
+      activeCluster = null;
       const heading = buildDateHeading(entry);
-      observeReveal(heading, Math.min(staggerIndex * 60, 400));
+      observeReveal(heading, Math.min(staggerIndexRef.value * 60, 400));
       timelineEl.appendChild(heading);
+      staggerIndexRef.value += 1;
       lastRenderedDateKey = dateKey;
-      staggerIndex += 1;
     }
 
-    const card = buildEntryCard(entry);
-    observeReveal(card, Math.min(staggerIndex * 60, 400));
-    timelineEl.appendChild(card);
-    staggerIndex += 1;
+    if (!hasImages(entry)) {
+      flushPending();
+      flushCluster([entry], staggerIndexRef);
+      activeCluster = null; // a text-only post can't be extended into a cluster
+      continue;
+    }
 
-    const commentBlock = buildCommentBlock(entry);
-    observeReveal(commentBlock, Math.min(staggerIndex * 60, 400));
-    timelineEl.appendChild(commentBlock);
-    staggerIndex += 1;
+    if (pendingCluster.length && withinClusterGap(pendingCluster[pendingCluster.length - 1].createdAt, entry.createdAt)) {
+      pendingCluster.push(entry);
+    } else {
+      flushPending();
+      pendingCluster = [entry];
+    }
   }
+  flushPending();
 }
 
 function appendNewEntry(entry) {
-  // Incremental append (no full re-render) so existing cards aren't disturbed.
+  // Incremental append (no full re-render) so existing cards aren't disturbed
+  // — except when extending the trailing cluster, which needs its card
+  // rebuilt to fold the new entry's photos/caption in.
   const emptyState = document.getElementById('empty-state');
   if (emptyState) emptyState.remove();
 
   const dateKey = new Date(entry.createdAt).toDateString();
+  const dateChanged = dateKey !== lastRenderedDateKey;
   let heading = null;
-  if (dateKey !== lastRenderedDateKey) {
+  if (dateChanged) {
     heading = buildDateHeading(entry, { pop: true });
     timelineEl.appendChild(heading);
     lastRenderedDateKey = dateKey;
+    activeCluster = null;
   }
 
-  const card = buildEntryCard(entry, { pop: true });
-  timelineEl.appendChild(card);
+  const canExtend =
+    !dateChanged &&
+    hasImages(entry) &&
+    activeCluster &&
+    withinClusterGap(activeCluster.entries[activeCluster.entries.length - 1].createdAt, entry.createdAt);
 
-  const commentBlock = buildCommentBlock(entry);
-  if (!prefersReducedMotion) commentBlock.classList.add('entry-added');
-  timelineEl.appendChild(commentBlock);
+  let cardEl;
+  let trailingCommentEl;
 
-  if (entry.imagePath) {
-    photoCount += 1;
+  if (canExtend) {
+    activeCluster.cardEl.remove();
+    activeCluster.trailingCommentEl.remove();
+    const newEntries = [...activeCluster.entries, entry];
+    const { card, lastEntry } = buildClusterCard(newEntries, { pop: true });
+    timelineEl.appendChild(card);
+    trailingCommentEl = buildCommentBlock(lastEntry);
+    if (!prefersReducedMotion) trailingCommentEl.classList.add('entry-added');
+    timelineEl.appendChild(trailingCommentEl);
+    cardEl = card;
+    activeCluster = { entries: newEntries, cardEl, trailingCommentEl };
+  } else {
+    const { card, lastEntry } = buildClusterCard([entry], { pop: true });
+    timelineEl.appendChild(card);
+    trailingCommentEl = buildCommentBlock(lastEntry);
+    if (!prefersReducedMotion) trailingCommentEl.classList.add('entry-added');
+    timelineEl.appendChild(trailingCommentEl);
+    cardEl = card;
+    activeCluster = hasImages(entry) ? { entries: [entry], cardEl, trailingCommentEl } : null;
+  }
+
+  if (entry.images && entry.images.length) {
+    photoCount += entry.images.length;
     updateDownloadButtonState();
   }
 
-  const scrollTarget = heading || card;
+  const scrollTarget = heading || cardEl;
   scrollTarget.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
 
   if (!prefersReducedMotion) {
-    setTimeout(() => card.classList.add('entry-glow'), 450);
+    setTimeout(() => cardEl.classList.add('entry-glow'), 450);
     setTimeout(() => {
-      card.classList.remove('entry-added', 'entry-glow');
-      commentBlock.classList.remove('entry-added');
+      cardEl.classList.remove('entry-added', 'entry-glow');
+      trailingCommentEl.classList.remove('entry-added');
       if (heading) heading.classList.remove('entry-added');
     }, 3300);
   }
@@ -384,11 +576,17 @@ async function loadEntries() {
   }
 }
 
-imageInput.addEventListener('change', () => {
-  fileLabelText.textContent = imageInput.files[0]
-    ? `📷 ${imageInput.files[0].name}`
-    : '📷 Add a photo (optional)';
-});
+function updateFileLabel() {
+  const count = imageInput.files.length;
+  fileLabelText.textContent =
+    count === 0
+      ? '📷 Add photos (optional)'
+      : count === 1
+      ? `📷 ${imageInput.files[0].name}`
+      : `📷 ${count} photos selected`;
+}
+
+imageInput.addEventListener('change', updateFileLabel);
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -410,7 +608,7 @@ form.addEventListener('submit', async (event) => {
     storeName((formData.get('name') || '').trim());
     form.reset();
     prefillName();
-    fileLabelText.textContent = '📷 Add a photo (optional)';
+    updateFileLabel();
     setStatus('Added to the timeline!', 'success');
     appendNewEntry(data);
   } catch {

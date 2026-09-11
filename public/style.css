@@ -396,6 +396,111 @@ button:disabled {
   opacity: 1;
 }
 
+/* Carousel: native horizontal scroll-snap does the swipe/drag work on both
+   touch (mobile) and trackpad/mouse (laptop) for free; arrows + dots are
+   layered on top for anyone who'd rather click. */
+.carousel-viewport {
+  position: relative;
+}
+
+.carousel-track {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  border-radius: 8px;
+  scrollbar-width: none;
+}
+
+.carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+.carousel-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+}
+
+.carousel-slide img {
+  margin-bottom: 0;
+}
+
+.carousel-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 1.2rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: none;
+  z-index: 2;
+}
+
+.carousel-nav:hover {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.carousel-prev {
+  left: 8px;
+}
+
+.carousel-next {
+  right: 8px;
+}
+
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 0.5rem 0 0.6rem;
+}
+
+.carousel-dot {
+  width: 6px;
+  height: 6px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--border);
+  cursor: pointer;
+  box-shadow: none;
+  transition: background 0.2s ease, width 0.2s ease, height 0.2s ease;
+}
+
+.carousel-dot.active {
+  background: var(--accent);
+  width: 8px;
+  height: 8px;
+}
+
+/* A divider between contributors' captions when several nearby posts have
+   clumped into one shared carousel card. */
+.entry-text-block--divider {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+}
+
+/* Comments nested inside a multi-post cluster card: same look, but no
+   overlap trick (there's no "next card" of its own to overlap here). */
+/* Compound selector (not just .comment-block--inline) so this reliably
+   wins over the base .comment-block margin regardless of rule order. */
+.comment-block.comment-block--inline {
+  margin: 0.5rem 0 0.75rem auto;
+}
+
 /* Scroll-reveal for entries/date headings as they enter the viewport */
 .reveal {
   opacity: 0;
@@ -530,6 +635,10 @@ button:disabled {
   button,
   .file-label {
     transition: none;
+  }
+
+  .carousel-track {
+    scroll-behavior: auto;
   }
 
   .entry-added,

@@ -13,6 +13,7 @@ const UPLOAD_DIR = path.join(__dirname, '..', 'data', 'uploads');
 const MAX_CAPTION_LENGTH = 500;
 const MAX_NAME_LENGTH = 60;
 const MAX_COMMENT_LENGTH = 300;
+const MAX_IMAGES_PER_ENTRY = 10;
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
@@ -93,21 +94,24 @@ app.get('/api/entries', (req, res) => {
 });
 
 app.post('/api/entries', submitLimiter, (req, res) => {
-  upload.single('image')(req, res, async (err) => {
+  upload.array('images', MAX_IMAGES_PER_ENTRY)(req, res, async (err) => {
     if (err) {
       const message =
         err.message === 'UNSUPPORTED_FILE_TYPE'
           ? 'Only JPEG, PNG, GIF, or WEBP images are allowed.'
           : err.code === 'LIMIT_FILE_SIZE'
-          ? 'Image is too large (max 8MB).'
+          ? 'Image is too large (max 8MB each).'
+          : err.code === 'LIMIT_UNEXPECTED_FILE' || err.code === 'LIMIT_FILE_COUNT'
+          ? `Too many photos (max ${MAX_IMAGES_PER_ENTRY}).`
           : 'Upload failed.';
       return res.status(400).json({ error: message });
     }
 
     const name = (req.body.name || '').trim().slice(0, MAX_NAME_LENGTH) || 'Anonymous';
     const caption = (req.body.caption || '').trim().slice(0, MAX_CAPTION_LENGTH);
+    const images = (req.files || []).map((file) => `/uploads/${file.filename}`);
 
-    if (!caption && !req.file) {
+    if (!caption && !images.length) {
       return res.status(400).json({ error: 'Add a photo, a caption, or both.' });
     }
 
@@ -115,7 +119,7 @@ app.post('/api/entries', submitLimiter, (req, res) => {
       id: crypto.randomUUID(),
       name,
       caption,
-      imagePath: req.file ? `/uploads/${req.file.filename}` : null,
+      images,
       createdAt: new Date().toISOString(),
       comments: [],
     };

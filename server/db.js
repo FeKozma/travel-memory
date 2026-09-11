@@ -27,10 +27,12 @@ function readAll() {
   } catch {
     entries = [];
   }
-  // Normalize older records that predate comments.
+  // Normalize older records that predate comments, and predate multi-photo
+  // entries (which used a single `imagePath` instead of an `images` array).
   return entries.map((entry) => ({
     ...entry,
     comments: Array.isArray(entry.comments) ? entry.comments : [],
+    images: Array.isArray(entry.images) ? entry.images : entry.imagePath ? [entry.imagePath] : [],
   }));
 }
 
