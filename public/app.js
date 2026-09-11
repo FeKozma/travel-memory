@@ -6,6 +6,22 @@ const emptyStateEl = document.getElementById('empty-state');
 const fileLabelText = document.getElementById('file-label-text');
 const imageInput = document.getElementById('image');
 
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let lastRenderedDateKey = null;
+
+const revealObserver = new IntersectionObserver(
+  (observedEntries) => {
+    for (const observed of observedEntries) {
+      if (observed.isIntersecting) {
+        observed.target.classList.add('in-view');
+        revealObserver.unobserve(observed.target);
+      }
+    }
+  },
+  { threshold: 0.15 }
+);
+
 function setStatus(message, kind) {
   statusEl.textContent = message;
   statusEl.className = `status ${kind || ''}`.trim();
@@ -26,53 +42,115 @@ function formatTime(dateStr) {
   return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
+function observeReveal(el, delayMs) {
+  if (prefersReducedMotion) return;
+  el.classList.add('reveal');
+  el.style.transitionDelay = `${delayMs}ms`;
+  revealObserver.observe(el);
+}
+
+function buildDateHeading(entry, options) {
+  const heading = document.createElement('h2');
+  heading.className = 'date-heading';
+  heading.textContent = formatDateHeading(entry.createdAt);
+  if (options && options.pop) heading.classList.add('entry-added');
+  return heading;
+}
+
+function buildEntryCard(entry, options) {
+  const card = document.createElement('article');
+  card.className = 'entry';
+  card.dataset.id = entry.id;
+
+  if (entry.imagePath) {
+    const img = document.createElement('img');
+    img.src = entry.imagePath;
+    img.alt = entry.caption || 'Trip photo';
+    img.loading = 'lazy';
+    if (img.complete) {
+      img.classList.add('loaded');
+    } else {
+      img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
+    }
+    card.appendChild(img);
+  }
+
+  if (entry.caption) {
+    const caption = document.createElement('p');
+    caption.className = 'entry-caption';
+    caption.textContent = entry.caption;
+    card.appendChild(caption);
+  }
+
+  const meta = document.createElement('p');
+  meta.className = 'entry-meta';
+  meta.textContent = `${entry.name} · ${formatTime(entry.createdAt)}`;
+  card.appendChild(meta);
+
+  if (options && options.pop && !prefersReducedMotion) {
+    card.classList.add('entry-added');
+  }
+
+  return card;
+}
+
 function renderTimeline(entries) {
   timelineEl.innerHTML = '';
+  lastRenderedDateKey = null;
 
   if (!entries.length) {
     const p = document.createElement('p');
     p.className = 'empty-state';
-    p.textContent = 'No memories yet — be the first to add one!';
+    p.id = 'empty-state';
+    p.textContent = "No memories yet — be the first to add one!";
     timelineEl.appendChild(p);
     return;
   }
 
-  let lastDateKey = null;
+  let staggerIndex = 0;
 
   for (const entry of entries) {
     const dateKey = new Date(entry.createdAt).toDateString();
-    if (dateKey !== lastDateKey) {
-      const heading = document.createElement('h2');
-      heading.className = 'date-heading';
-      heading.textContent = formatDateHeading(entry.createdAt);
+    if (dateKey !== lastRenderedDateKey) {
+      const heading = buildDateHeading(entry);
+      observeReveal(heading, Math.min(staggerIndex * 60, 400));
       timelineEl.appendChild(heading);
-      lastDateKey = dateKey;
+      lastRenderedDateKey = dateKey;
+      staggerIndex += 1;
     }
 
-    const card = document.createElement('article');
-    card.className = 'entry';
-
-    if (entry.imagePath) {
-      const img = document.createElement('img');
-      img.src = entry.imagePath;
-      img.alt = entry.caption || 'Trip photo';
-      img.loading = 'lazy';
-      card.appendChild(img);
-    }
-
-    if (entry.caption) {
-      const caption = document.createElement('p');
-      caption.className = 'entry-caption';
-      caption.textContent = entry.caption;
-      card.appendChild(caption);
-    }
-
-    const meta = document.createElement('p');
-    meta.className = 'entry-meta';
-    meta.textContent = `${entry.name} · ${formatTime(entry.createdAt)}`;
-    card.appendChild(meta);
-
+    const card = buildEntryCard(entry);
+    observeReveal(card, Math.min(staggerIndex * 60, 400));
     timelineEl.appendChild(card);
+    staggerIndex += 1;
+  }
+}
+
+function appendNewEntry(entry) {
+  // Incremental append (no full re-render) so existing cards aren't disturbed.
+  const emptyState = document.getElementById('empty-state');
+  if (emptyState) emptyState.remove();
+
+  const dateKey = new Date(entry.createdAt).toDateString();
+  let heading = null;
+  if (dateKey !== lastRenderedDateKey) {
+    heading = buildDateHeading(entry, { pop: true });
+    timelineEl.appendChild(heading);
+    lastRenderedDateKey = dateKey;
+  }
+
+  const card = buildEntryCard(entry, { pop: true });
+  timelineEl.appendChild(card);
+
+  const scrollTarget = heading || card;
+  scrollTarget.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+
+  if (!prefersReducedMotion) {
+    setTimeout(() => card.classList.add('entry-glow'), 450);
+    setTimeout(() => {
+      card.classList.remove('entry-added', 'entry-glow');
+      if (heading) heading.classList.remove('entry-added');
+    }, 3300);
   }
 }
 
@@ -123,7 +201,7 @@ form.addEventListener('submit', async (event) => {
     form.reset();
     fileLabelText.textContent = '📷 Add a photo (optional)';
     setStatus('Added to the timeline!', 'success');
-    await loadEntries();
+    appendNewEntry(data);
   } catch {
     setStatus('Network error — please try again.', 'error');
   } finally {
