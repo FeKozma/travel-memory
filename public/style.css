@@ -246,6 +246,42 @@ button:disabled {
   color: var(--accent);
 }
 
+.timeline-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
+}
+
+.secondary-btn:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.secondary-btn:active {
+  transform: scale(0.97);
+}
+
+.secondary-btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
 .timeline {
   position: relative;
   padding-left: 34px;

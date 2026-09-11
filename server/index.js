@@ -4,6 +4,7 @@ const fs = require('fs');
 const express = require('express');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
+const archiver = require('archiver');
 const db = require('./db');
 
 const PORT = process.env.PORT || 3000;
@@ -47,6 +48,26 @@ const submitLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many uploads from this connection. Try again later.' },
 });
+
+// Zipping every photo is more expensive than a normal request, so this gets
+// its own (stricter) limiter.
+const downloadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many download requests. Try again later.' },
+});
+
+function slugify(text) {
+  return (
+    text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'travel-memory'
+  );
+}
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(UPLOAD_DIR));
@@ -94,6 +115,33 @@ app.post('/api/entries', submitLimiter, (req, res) => {
       res.status(500).json({ error: 'Could not save entry.' });
     }
   });
+});
+
+app.get('/api/download-all', downloadLimiter, (req, res) => {
+  let files;
+  try {
+    files = fs.readdirSync(UPLOAD_DIR).filter((f) => fs.statSync(path.join(UPLOAD_DIR, f)).isFile());
+  } catch {
+    files = [];
+  }
+
+  if (!files.length) {
+    return res.status(404).json({ error: 'No photos to download yet.' });
+  }
+
+  res.attachment(`${slugify(TRIP_TITLE)}-photos.zip`);
+
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  archive.on('error', (err) => {
+    console.error('Zip error:', err);
+    res.status(500).end();
+  });
+
+  archive.pipe(res);
+  for (const file of files) {
+    archive.file(path.join(UPLOAD_DIR, file), { name: file });
+  }
+  archive.finalize();
 });
 
 app.listen(PORT, () => {

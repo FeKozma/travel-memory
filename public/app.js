@@ -6,8 +6,34 @@ const emptyStateEl = document.getElementById('empty-state');
 const fileLabelText = document.getElementById('file-label-text');
 const imageInput = document.getElementById('image');
 const themeToggleBtn = document.getElementById('theme-toggle');
+const nameInput = document.getElementById('name');
+const downloadAllBtn = document.getElementById('download-all');
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// --- Remember the visitor's name on this device, so they only type it once. ---
+const NAME_STORAGE_KEY = 'travelMemoryName';
+
+function getStoredName() {
+  try {
+    return localStorage.getItem(NAME_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function storeName(name) {
+  try {
+    if (name) localStorage.setItem(NAME_STORAGE_KEY, name);
+  } catch {
+    // Ignore storage errors (private browsing, etc.) — just won't be remembered.
+  }
+}
+
+function prefillName() {
+  const stored = getStoredName();
+  if (stored) nameInput.value = stored;
+}
 
 // --- Theme: defaults to the system preference; the toggle sets an explicit
 // override (persisted) that wins regardless of what the system does. ---
@@ -66,6 +92,17 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 updateThemeToggleIcon();
 
 let lastRenderedDateKey = null;
+let photoCount = 0;
+
+function updateDownloadButtonState() {
+  const enabled = photoCount > 0;
+  downloadAllBtn.classList.toggle('disabled', !enabled);
+  downloadAllBtn.setAttribute('aria-disabled', String(!enabled));
+}
+
+downloadAllBtn.addEventListener('click', (event) => {
+  if (downloadAllBtn.classList.contains('disabled')) event.preventDefault();
+});
 
 const revealObserver = new IntersectionObserver(
   (observedEntries) => {
@@ -154,6 +191,8 @@ function buildEntryCard(entry, options) {
 function renderTimeline(entries) {
   timelineEl.innerHTML = '';
   lastRenderedDateKey = null;
+  photoCount = entries.filter((entry) => entry.imagePath).length;
+  updateDownloadButtonState();
 
   if (!entries.length) {
     const p = document.createElement('p');
@@ -198,6 +237,11 @@ function appendNewEntry(entry) {
 
   const card = buildEntryCard(entry, { pop: true });
   timelineEl.appendChild(card);
+
+  if (entry.imagePath) {
+    photoCount += 1;
+    updateDownloadButtonState();
+  }
 
   const scrollTarget = heading || card;
   scrollTarget.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
@@ -255,7 +299,9 @@ form.addEventListener('submit', async (event) => {
       return;
     }
 
+    storeName((formData.get('name') || '').trim());
     form.reset();
+    prefillName();
     fileLabelText.textContent = '📷 Add a photo (optional)';
     setStatus('Added to the timeline!', 'success');
     appendNewEntry(data);
@@ -267,5 +313,6 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
+prefillName();
 loadConfig();
 loadEntries();
