@@ -6,6 +6,8 @@ const emptyStateEl = document.getElementById('empty-state');
 const fileLabelText = document.getElementById('file-label-text');
 const imageInput = document.getElementById('image');
 const themeToggleBtn = document.getElementById('theme-toggle');
+const themeToggleIcon = themeToggleBtn.querySelector('.icon-btn-icon');
+const themeToggleLabel = themeToggleBtn.querySelector('.icon-btn-label');
 const nameInput = document.getElementById('name');
 const downloadAllBtn = document.getElementById('download-all');
 
@@ -55,7 +57,8 @@ function getActiveTheme() {
 
 function updateThemeToggleIcon() {
   const active = getActiveTheme();
-  themeToggleBtn.textContent = active === 'dark' ? '☀️' : '🌙';
+  themeToggleIcon.textContent = active === 'dark' ? '☀️' : '🌙';
+  themeToggleLabel.textContent = active === 'dark' ? 'Light mode' : 'Dark mode';
   themeToggleBtn.setAttribute(
     'aria-label',
     active === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
