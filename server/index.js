@@ -12,6 +12,7 @@ const TRIP_TITLE = process.env.TRIP_TITLE || 'Travel Memory';
 const UPLOAD_DIR = path.join(__dirname, '..', 'data', 'uploads');
 const MAX_CAPTION_LENGTH = 500;
 const MAX_NAME_LENGTH = 60;
+const MAX_COMMENT_LENGTH = 300;
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
@@ -59,6 +60,15 @@ const downloadLimiter = rateLimit({
   message: { error: 'Too many download requests. Try again later.' },
 });
 
+// Comments are cheap (text-only), so this stays looser than uploads.
+const commentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many comments from this connection. Try again later.' },
+});
+
 function slugify(text) {
   return (
     text
@@ -71,6 +81,7 @@ function slugify(text) {
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(UPLOAD_DIR));
+app.use(express.json({ limit: '10kb' }));
 
 app.get('/api/config', (req, res) => {
   res.json({ title: TRIP_TITLE });
@@ -106,6 +117,7 @@ app.post('/api/entries', submitLimiter, (req, res) => {
       caption,
       imagePath: req.file ? `/uploads/${req.file.filename}` : null,
       createdAt: new Date().toISOString(),
+      comments: [],
     };
 
     try {
@@ -115,6 +127,32 @@ app.post('/api/entries', submitLimiter, (req, res) => {
       res.status(500).json({ error: 'Could not save entry.' });
     }
   });
+});
+
+app.post('/api/entries/:id/comments', commentLimiter, async (req, res) => {
+  const name = (req.body?.name || '').trim().slice(0, MAX_NAME_LENGTH) || 'Anonymous';
+  const text = (req.body?.text || '').trim().slice(0, MAX_COMMENT_LENGTH);
+
+  if (!text) {
+    return res.status(400).json({ error: 'Comment text is required.' });
+  }
+
+  const comment = {
+    id: crypto.randomUUID(),
+    name,
+    text,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await db.addComment(req.params.id, comment);
+    res.status(201).json(comment);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') {
+      return res.status(404).json({ error: 'That post no longer exists.' });
+    }
+    res.status(500).json({ error: 'Could not save comment.' });
+  }
 });
 
 app.get('/api/download-all', downloadLimiter, (req, res) => {

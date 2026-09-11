@@ -61,12 +61,20 @@ body {
   transition: background 0.25s ease, color 0.25s ease;
 }
 
-.theme-toggle {
+.top-controls {
   position: fixed;
   top: 1rem;
   right: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 10;
+}
+
+.theme-toggle {
   width: 40px;
   height: 40px;
+  flex-shrink: 0;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--card);
@@ -78,7 +86,6 @@ body {
   justify-content: center;
   box-shadow: 0 2px 10px var(--shadow);
   transition: background 0.25s ease, border-color 0.25s ease, transform 0.15s ease;
-  z-index: 10;
 }
 
 .theme-toggle:hover {
@@ -246,24 +253,21 @@ button:disabled {
   color: var(--accent);
 }
 
-.timeline-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 1rem;
-}
-
 .secondary-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  background: transparent;
+  height: 40px;
+  gap: 0.35rem;
+  background: var(--card);
   color: var(--accent);
   border: 1px solid var(--accent);
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
+  padding: 0 0.9rem;
+  border-radius: 999px;
   font-size: 0.85rem;
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
+  box-shadow: 0 2px 10px var(--shadow);
   transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
 }
 
@@ -336,7 +340,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 2.25rem;
   box-shadow: 0 2px 10px var(--shadow);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
@@ -383,7 +387,10 @@ button:disabled {
 
 .reveal.in-view {
   opacity: 1;
-  transform: translateY(0);
+  /* "none" (not translateY(0)) — any actual transform value creates a new
+     stacking context, which would trap each entry's comment tag behind
+     the next entry instead of overlapping on top of it. */
+  transform: none;
 }
 
 /* Pop-in + highlight for an entry just added by this visitor */
@@ -393,6 +400,127 @@ button:disabled {
 
 .entry-glow {
   animation: highlightPulse 1.4s ease-out 2;
+}
+
+@media (max-width: 420px) {
+  .secondary-btn span {
+    display: none;
+  }
+
+  .secondary-btn {
+    padding: 0 0.7rem;
+  }
+}
+
+/* Comments: a small tag attached to the post's corner, overlapping it and
+   sitting a bit to the right of its edge. Opens into a note-like panel. */
+.comment-stack {
+  position: absolute;
+  right: -14px;
+  bottom: -14px;
+  z-index: 3;
+}
+
+.comment-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 3px 10px var(--shadow-strong);
+  transform: rotate(-3deg);
+}
+
+.comment-toggle:hover {
+  transform: rotate(-3deg) scale(1.06);
+}
+
+.comment-toggle:active {
+  transform: rotate(-3deg) scale(0.97);
+}
+
+.comment-count {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.comment-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(270px, 78vw);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.7rem;
+  box-shadow: 0 10px 26px var(--shadow-strong);
+  transform-origin: top right;
+  opacity: 0;
+  transform: scale(0.95) translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.comment-panel.open {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+.comment-list {
+  max-height: 170px;
+  overflow-y: auto;
+  margin: 0 0 0.5rem;
+  padding-right: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.comment-item {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.comment-author {
+  font-weight: 600;
+  color: var(--accent-2);
+}
+
+.comment-empty {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.comment-form {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.comment-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-family: inherit;
+}
+
+.comment-form button {
+  padding: 0.4rem 0.65rem;
+  font-size: 0.82rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -410,7 +538,8 @@ button:disabled {
   .entry,
   .entry img,
   button,
-  .file-label {
+  .file-label,
+  .comment-panel {
     transition: none;
   }
 

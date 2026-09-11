@@ -143,6 +143,116 @@ function observeReveal(el, delayMs) {
   revealObserver.observe(el);
 }
 
+// --- Comments: attached to their post, overlapping its corner ---
+function closeAllCommentPanels() {
+  document.querySelectorAll('.comment-panel.open').forEach((p) => p.classList.remove('open'));
+}
+
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.comment-stack')) closeAllCommentPanels();
+});
+
+function buildCommentStack(entry) {
+  if (!Array.isArray(entry.comments)) entry.comments = [];
+
+  const wrap = document.createElement('div');
+  wrap.className = 'comment-stack';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'comment-toggle';
+  toggle.setAttribute('aria-label', 'View or add comments');
+  wrap.appendChild(toggle);
+
+  const panel = document.createElement('div');
+  panel.className = 'comment-panel';
+
+  const list = document.createElement('div');
+  list.className = 'comment-list';
+  panel.appendChild(list);
+
+  const form = document.createElement('form');
+  form.className = 'comment-form';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'Add a comment…';
+  input.maxLength = 300;
+  const submit = document.createElement('button');
+  submit.type = 'submit';
+  submit.textContent = '➤';
+  submit.setAttribute('aria-label', 'Post comment');
+  form.appendChild(input);
+  form.appendChild(submit);
+  panel.appendChild(form);
+
+  wrap.appendChild(panel);
+
+  function renderCount() {
+    toggle.innerHTML = `💬 <span class="comment-count">${entry.comments.length}</span>`;
+  }
+
+  function renderComments() {
+    list.innerHTML = '';
+    if (!entry.comments.length) {
+      const empty = document.createElement('p');
+      empty.className = 'comment-empty';
+      empty.textContent = 'No comments yet.';
+      list.appendChild(empty);
+      return;
+    }
+    for (const comment of entry.comments) {
+      const p = document.createElement('p');
+      p.className = 'comment-item';
+      const author = document.createElement('span');
+      author.className = 'comment-author';
+      author.textContent = `${comment.name}: `;
+      p.appendChild(author);
+      p.appendChild(document.createTextNode(comment.text));
+      list.appendChild(p);
+    }
+    list.scrollTop = list.scrollHeight;
+  }
+
+  toggle.addEventListener('click', () => {
+    const wasOpen = panel.classList.contains('open');
+    closeAllCommentPanels();
+    if (!wasOpen) {
+      renderComments();
+      panel.classList.add('open');
+      input.focus();
+    }
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+
+    submit.disabled = true;
+    try {
+      const res = await fetch(`/api/entries/${entry.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: getStoredName(), text }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+
+      entry.comments.push(data);
+      input.value = '';
+      renderCount();
+      renderComments();
+    } catch {
+      // Network error — leave the draft in place so they can retry.
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  renderCount();
+  return wrap;
+}
+
 function buildDateHeading(entry, options) {
   const heading = document.createElement('h2');
   heading.className = 'date-heading';
@@ -180,6 +290,8 @@ function buildEntryCard(entry, options) {
   meta.className = 'entry-meta';
   meta.textContent = `${entry.name} · ${formatTime(entry.createdAt)}`;
   card.appendChild(meta);
+
+  card.appendChild(buildCommentStack(entry));
 
   if (options && options.pop && !prefersReducedMotion) {
     card.classList.add('entry-added');

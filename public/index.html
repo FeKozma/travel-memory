@@ -19,7 +19,10 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark/light theme"></button>
+  <div class="top-controls">
+    <a id="download-all" class="secondary-btn" href="/api/download-all" aria-disabled="true">⬇ <span>Download all</span></a>
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark/light theme"></button>
+  </div>
 
   <header class="page-header">
     <h1 id="trip-title">Travel Memory</h1>
@@ -45,10 +48,6 @@
         <p id="form-status" class="status" role="status"></p>
       </form>
     </section>
-
-    <div class="timeline-actions">
-      <a id="download-all" class="secondary-btn" href="/api/download-all" aria-disabled="true">⬇ Download all photos</a>
-    </div>
 
     <section id="timeline" class="timeline">
       <p class="empty-state" id="empty-state">Loading timeline…</p>

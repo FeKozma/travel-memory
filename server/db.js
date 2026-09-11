@@ -21,23 +21,56 @@ function ensureStore() {
 function readAll() {
   ensureStore();
   const raw = fs.readFileSync(DB_FILE, 'utf8');
+  let entries;
   try {
-    return JSON.parse(raw);
+    entries = JSON.parse(raw);
   } catch {
-    return [];
+    entries = [];
   }
+  // Normalize older records that predate comments.
+  return entries.map((entry) => ({
+    ...entry,
+    comments: Array.isArray(entry.comments) ? entry.comments : [],
+  }));
 }
 
-let writeQueue = Promise.resolve();
+function writeAll(entries) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(entries, null, 2), 'utf8');
+}
+
+// A queue that always keeps moving even if one task fails — each caller's
+// own promise still reflects that task's real outcome (success or error),
+// but a failure never wedges the chain for tasks queued after it.
+let queue = Promise.resolve();
+
+function enqueue(task) {
+  const result = queue.then(task);
+  queue = result.catch(() => {});
+  return result;
+}
 
 function appendEntry(entry) {
-  writeQueue = writeQueue.then(() => {
+  return enqueue(() => {
     const entries = readAll();
     entries.push(entry);
-    fs.writeFileSync(DB_FILE, JSON.stringify(entries, null, 2), 'utf8');
+    writeAll(entries);
     return entry;
   });
-  return writeQueue;
 }
 
-module.exports = { readAll, appendEntry };
+function addComment(entryId, comment) {
+  return enqueue(() => {
+    const entries = readAll();
+    const entry = entries.find((e) => e.id === entryId);
+    if (!entry) {
+      const err = new Error('Entry not found');
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+    entry.comments.push(comment);
+    writeAll(entries);
+    return comment;
+  });
+}
+
+module.exports = { readAll, appendEntry, addComment };
