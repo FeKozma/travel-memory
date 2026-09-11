@@ -5,8 +5,65 @@ const timelineEl = document.getElementById('timeline');
 const emptyStateEl = document.getElementById('empty-state');
 const fileLabelText = document.getElementById('file-label-text');
 const imageInput = document.getElementById('image');
+const themeToggleBtn = document.getElementById('theme-toggle');
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// --- Theme: defaults to the system preference; the toggle sets an explicit
+// override (persisted) that wins regardless of what the system does. ---
+function getStoredTheme() {
+  try {
+    return localStorage.getItem('theme');
+  } catch {
+    return null;
+  }
+}
+
+function getSystemTheme() {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function getActiveTheme() {
+  return document.documentElement.getAttribute('data-theme') || getSystemTheme();
+}
+
+function updateThemeToggleIcon() {
+  const active = getActiveTheme();
+  themeToggleBtn.textContent = active === 'dark' ? '☀️' : '🌙';
+  themeToggleBtn.setAttribute(
+    'aria-label',
+    active === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
+  );
+}
+
+function applyTheme(theme) {
+  if (theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  try {
+    if (theme) {
+      localStorage.setItem('theme', theme);
+    } else {
+      localStorage.removeItem('theme');
+    }
+  } catch {
+    // Ignore storage errors (private browsing, etc.) — theme just won't persist.
+  }
+  updateThemeToggleIcon();
+}
+
+themeToggleBtn.addEventListener('click', () => {
+  applyTheme(getActiveTheme() === 'dark' ? 'light' : 'dark');
+});
+
+// If the visitor hasn't explicitly overridden, keep following the system live.
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (!getStoredTheme()) updateThemeToggleIcon();
+});
+
+updateThemeToggleIcon();
 
 let lastRenderedDateKey = null;
 

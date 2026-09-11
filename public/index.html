@@ -4,9 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Travel Memory</title>
+  <script>
+    // Applied before first paint to avoid a flash of the wrong theme.
+    // No stored preference = follow the system, handled purely by CSS media queries.
+    (function () {
+      try {
+        const stored = localStorage.getItem('theme');
+        if (stored === 'light' || stored === 'dark') {
+          document.documentElement.setAttribute('data-theme', stored);
+        }
+      } catch (e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark/light theme"></button>
+
   <header class="page-header">
     <h1 id="trip-title">Travel Memory</h1>
     <p class="subtitle">Add a photo, a few words, or both — everyone's contributions build the timeline below.</p>
