@@ -2,7 +2,7 @@ services:
   web:
     build: .
     ports:
-      - "${PORT:-3000}:${PORT:-3000}"
+      - "127.0.0.1:${PORT:-3000}:${PORT:-3000}"
     environment:
       - PORT=${PORT:-3000}
       - TRIP_TITLE=${TRIP_TITLE:-Our Budapest Trip}
